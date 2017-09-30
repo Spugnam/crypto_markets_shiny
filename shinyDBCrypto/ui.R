@@ -14,7 +14,8 @@ shinyUI(dashboardPage(
         ),
         selectizeInput("selected",
                        "Select Item to Display",
-                       choice)
+                       choice, 
+                       selected = "close")
     ),
     dashboardBody(
         tags$head(
@@ -22,8 +23,8 @@ shinyUI(dashboardPage(
         ),
         tabItems(
           tabItem(tabName = "map",
-                  fluidRow(box(htmlOutput("hist"), height = 300)),
-                  fluidRow(box(htmlOutput("graph"), height = 300))
+                  fluidRow(box(htmlOutput("graph"), height = 300)),
+                  fluidRow(box(htmlOutput("hist"), height = 300))
                   ),
           tabItem(tabName = "data",
                   fluidRow(box(DT::dataTableOutput("table"), width = 12)))

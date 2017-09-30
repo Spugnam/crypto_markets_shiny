@@ -14,6 +14,7 @@ setwd("/Users/Quentin/Documents/Kaggle/cryto_markets/shinyDBCrypto")
 raw.crypto <- fread("../crypto.csv", stringsAsFactors = F)
 crypto <- as.data.table(raw.crypto)
 crypto <- na.omit(crypto)
+print("test")
 crypto[,date := list(as.Date(date))][, volume := list(as.numeric(volume))] # "pipe" to update 2 columns
 crypto <- as.data.frame(crypto)
 choice <- colnames(crypto)[c(2,3,4,5,6,9,11)]
