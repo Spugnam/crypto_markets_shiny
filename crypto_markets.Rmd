@@ -1,0 +1,132 @@
+---
+title: "Crypto-markets"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r load_data, cache=T, warning=FALSE, eval=T}
+library(data.table)
+library(dplyr)
+library(ggplot2)
+getwd()
+raw.crypto <- fread("./crypto.csv", stringsAsFactors = F)
+crypto <- as.data.table(raw.crypto)
+crypto <- crypto[!is.na(date)] # remove 4 NA records
+crypto <- na.omit(crypto)
+```
+
+```{r Data Exploration}
+crypto %>% head(5)
+```
+
+```{r}
+str(crypto)
+```
+
+```{r}
+crypto$volume <- as.numeric(crypto$volume)
+```
+
+```{r}
+# List of coins
+levels(as.factor(crypto$coin)) %>% head(20)
+levels(as.factor(crypto$coin)) %>% length()
+```
+
+```{r variable formats}
+# Convert date to Date format
+crypto[,date:=as.Date(date)]
+```
+
+```{r NAs}
+# analysis of NAs
+```
+
+```{r add USD open & close}
+str(crypto)
+```
+
+```{r active coins per month}
+#View(crypto)
+crypto_active <- crypto[, 
+                        .(date, month=format(date,"%Y%m"),
+                          first_month=ifelse(date==min(date),"yes", "no"), 
+                          last_month=ifelse(date==max(date) & format(date, "%Y%m")!="201709","yes", "no")),
+                        by=.(coin)] %>%
+  ungroup() %>%
+  group_by(month) %>%
+  summarise(active=n_distinct(coin), 
+            initiations=sum(first_month=="yes"), 
+            discontinuations=sum(last_month=="yes"))
+
+View(crypto_active)
+crypto_active %>%
+  ggplot(aes(x=month, y=value)) + 
+  geom_line(aes(y=active, col="Monthly active coins"), group=1) +
+  geom_line(aes(y=initiations, col="Coin initiations"), group=1) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  coord_cartesian(ylim = c(0, 1100)) +
+  ggtitle("Coin initiations (coinmarketcap.com)") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+
+```
+
+```{r Graph with normalized start date & price}
+
+crypto_initiation_date <- crypto %>%  group_by(coin) %>%  mutate(initiation_date=min(date)) # add initiation date
+
+crypto_initiation_date_price <- crypto_initiation_date %>%
+  mutate(initiation_price=close[date==initiation_date])  # condition on different line in group ! very useful !
+
+crypto_norm <- crypto_initiation_date_price %>%
+  mutate(relative_date=(date-(initiation_date-as.Date("2013-04-28"))), # calculate relative date to normalize starts
+         relative_price=ifelse(initiation_price!=0, close/initiation_price, close) ) 
+#View(crypto_norm)
+
+crypto_norm_volume <- crypto_norm %>% group_by(coin) %>% mutate(avg_volume=mean(volume)) # average volume per coin
+#View(crypto_norm_volume)
+
+crypto_norm_volume[,] %>%
+  filter(avg_volume > 500000) %>%
+  ggplot() + 
+  geom_line(aes(x=relative_date, y=log(relative_price+1), group=symbol)) 
+#+  coord_cartesian(xlim = c(as.Date("2013-12-01"), as.Date("2014-01-31")), ylim=c(0, 150)) # removed zoom
+```
+
+```{r graph by year batch}
+crypto_norm_volume[crypto_norm_volume$relative_price < 100 & 
+                     crypto_norm_volume$relative_price > 150 & 
+                     crypto_norm_volume$relative_date>"2013-12-15" & 
+                     crypto_norm_volume$relative_date<"2013-12-31",]
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r YYY, echo=FALSE}
+
+```
+
+```{r}
+which(is.na(crypto_norm_volume),arr.ind=TRUE)
+```
+
+```{r}
+#library(Amelia)
+#missmap(crypto_norm_volume, legend = TRUE, col = c("yellow","black"), main = "Missing Data Map",)
+```
+
