@@ -78,8 +78,46 @@ crypto_active %>%
   ggtitle("Coin initiations (coinmarketcap.com)") +
   theme(plot.title = element_text(hjust = 0.5))
 
+```
 
+```{r}
+# Consistency check (despite holes in data -see next chunk)
+sum(crypto_active$initiations-crypto_active$discontinuations) == crypto_active$active[dim(crypto_active)[1]]
+```
 
+```{r}
+# Analysis: showing some coins are not reported on all months
+
+# unique coins for 2013-11
+coins201311 <-crypto %>% 
+  mutate(month=format(date,"%Y%m")) %>%
+  subset(select=c(12, 1:11)) %>% # put new month column at the beginning
+  distinct(month, coin) %>%          # useful to remove extra rows !
+  arrange(month, coin) %>%
+  filter(month=="201311")
+
+coins201310 <-crypto %>% 
+  mutate(month=format(date,"%Y%m")) %>%
+  subset(select=c(12, 1:11)) %>% # put new month column at the beginning
+  distinct(month, coin) %>% # useful ! 
+  arrange(month, coin) %>%
+  filter(month=="201310")
+
+difference <- coins201311 %>% anti_join(coins201310, by = "coin")
+
+newcoins201311 <- crypto_initiation_date_price %>%
+  filter(grepl("2013-11", initiation_date)) %>%
+  distinct(coin)
+
+difference %>% anti_join(newcoins201311, by = "coin") # Bottlecaps not explained by coin initiations
+
+# showing gap months for Bottlecaps (e.g. 2013-10)
+crypto %>% 
+  mutate(month=format(date,"%Y%m")) %>%
+  subset(select=c(12, 1:11)) %>% # put new month column at the beginning
+  distinct(month, coin) %>% # useful ! 
+  arrange(month, coin) %>%
+  filter(coin=="Bottlecaps")
 ```
 
 ```{r Graph with normalized start date & price}
@@ -97,36 +135,140 @@ crypto_norm <- crypto_initiation_date_price %>%
 crypto_norm_volume <- crypto_norm %>% group_by(coin) %>% mutate(avg_volume=mean(volume)) # average volume per coin
 #View(crypto_norm_volume)
 
-crypto_norm_volume[,] %>%
-  filter(avg_volume > 500000) %>%
+library(gridExtra)
+
+p1 <- crypto_norm_volume[,] %>%
+  filter(avg_volume > 100000) %>%
   ggplot() + 
   geom_line(aes(x=relative_date, y=log(relative_price+1), group=symbol)) 
-#+  coord_cartesian(xlim = c(as.Date("2013-12-01"), as.Date("2014-01-31")), ylim=c(0, 150)) # removed zoom
-```
+p2 <- crypto_norm_volume[,] %>%
+  filter(avg_volume > 100000) %>%
+  ggplot() + 
+  geom_line(aes(x=relative_date, y=log(relative_price+1), group=symbol)) + coord_polar()
 
-```{r graph by year batch}
-crypto_norm_volume[crypto_norm_volume$relative_price < 100 & 
-                     crypto_norm_volume$relative_price > 150 & 
-                     crypto_norm_volume$relative_date>"2013-12-15" & 
-                     crypto_norm_volume$relative_date<"2013-12-31",]
-
+grid.arrange(p1, p2, ncol = 2, top = "Log coin price series")
 
 ```
 
-## Including Plots
+```{r market column}
 
-You can also embed plots, for example:
 
-```{r YYY, echo=FALSE}
+
+```
+
+```{r dollar averaging}
+
+# setting a volume threshold at which to buy
+volume_threshold <- 100000
+
+# min with default trade_date 
+Robustmin <- function(x) {if (length(x)>0) min(x) else Sys.Date()+1} # trade date when no trade was made: tomorrow
+
+# define trade date
+crypto_trade_date <- crypto %>% 
+  group_by(coin) %>%  
+  arrange(date, coin) %>%
+  mutate(trade_date=Robustmin(date[volume>volume_threshold])) # add trade_date
+
+# Tests on trading date
+crypto_trade_date[crypto_trade_date$coin=="808Coin" & 
+                    (crypto_trade_date$date == crypto_trade_date$trade_date |
+                       crypto_trade_date$date == crypto_trade_date$trade_date -1 |
+                       crypto_trade_date$date == crypto_trade_date$trade_date +1),]
+
+# get trade price at trade date (close of the day). Check that a date exist and that the price is not 0
+crypto_trade_price <- crypto_trade_date %>%
+  mutate(trade_price=ifelse(length(close[date==trade_date])==1,ifelse(close[date==trade_date]!=0,close[date==trade_date],Inf),Inf))
+
+# Tests on trading price
+crypto_trade_price[crypto_trade_price$symbol=="FLDC" & 
+                    (crypto_trade_price$date == crypto_trade_price$trade_date |
+                       crypto_trade_price$date == crypto_trade_price$trade_date -1 |
+                       crypto_trade_price$date == crypto_trade_price$trade_date +1),]
+# Conclusion: need to look into coins with volume > threshold but price = 0 (e.g. FLDC)
+
+# calculate coin holding on any given date
+crypto_coin_holding <- crypto_trade_price %>%
+  mutate(holding= ifelse(trade_price!=Inf, close / trade_price, 0))
+
+```
+
+```{r Stats}
+# % of coins bought
+perc <- dim(crypto_trade_date[crypto_trade_date$trade_date!=Sys.Date()+1,])[1]/dim(crypto_trade_date)[1]*100
+cat("Percentage of coins bought (based on volume threshold): \n", perc, "\n")
+
+# Total Holdings (2017-09-28)
+a <- sum(crypto_coin_holding[crypto_coin_holding$date==as.Date("2017-09-28"),c("holding")])
+cat("Total holdings: \n", a, "\n")
+
+# Total Holdings - no BTC
+b <- sum(crypto_coin_holding[crypto_coin_holding$date==as.Date("2017-09-28") & crypto_coin_holding$symbol!="BTC",c("holding")])
+cat("Total holdings, no bitcoin: \n", b, "\n")
+
+# Total Holdings - no BTC/ ETH
+c <- sum(crypto_coin_holding[crypto_coin_holding$date==as.Date("2017-09-28") & 
+                               crypto_coin_holding$symbol!="BTC" &
+                               crypto_coin_holding$symbol!="ETH",c("holding")])
+cat("Total holdings, no bitcoin: \n", c, "\n")
+
+```
+
+```{r Portfolio Pie Chart}
+# Total Holdings 
+holdings <- crypto_coin_holding %>%
+  group_by(date) %>%
+  filter(date=="2017-09-28") %>%
+  mutate(Total_holdings=sum(holding)) %>%
+  mutate(holding_coin_perc=holding/Total_holdings*100) %>%
+  filter(holding_coin_perc>0.5) %>%
+  arrange(desc(holding_coin_perc))
+
+holdings
+
+holdings %>% ggplot(aes(x = "", y= holding_coin_perc, fill=coin)) + geom_bar(stat = "identity") + coord_polar(theta = "y")
 
 ```
 
 ```{r}
-which(is.na(crypto_norm_volume),arr.ind=TRUE)
+# need to reorder fill factor levels in inverse order of appearance (see next chunk)
+holdings %>% ggplot(aes(x = "", y= holding_coin_perc, fill=factor(coin, levels = as.list(coin_order)$coin))) + 
+  geom_bar(stat = "identity") + coord_polar(theta = "y")
 ```
 
 ```{r}
-#library(Amelia)
-#missmap(crypto_norm_volume, legend = TRUE, col = c("yellow","black"), main = "Missing Data Map",)
+# coin ordering for pie chart
+coin_order <- crypto_coin_holding %>%
+  group_by(date) %>%
+  filter(date=="2017-09-28") %>%
+  mutate(Total_holdings=sum(holding)) %>%
+  mutate(holding_coin_perc=holding/Total_holdings*100) %>%
+  filter(holding_coin_perc>0.5) %>%
+  arrange(holding_coin_perc) %>%
+  ungroup() %>%
+  select(coin)
+
+as.list(coin_order)$coin
 ```
+
+```{r}
+
+```
+
+```{r Selling: RSI/ volume?}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
 

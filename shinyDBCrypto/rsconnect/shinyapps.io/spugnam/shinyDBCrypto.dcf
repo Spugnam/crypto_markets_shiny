@@ -5,8 +5,8 @@ account: spugnam
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 220671
-bundleId: 1005048
+bundleId: 1005114
 url: https://spugnam.shinyapps.io/shinyDBCrypto/
-when: 1506804738.0482
+when: 1506812164.26974
 asMultiple: FALSE
 asStatic: FALSE

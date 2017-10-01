@@ -26,7 +26,7 @@ shinyServer(function(input, output){
     output$graph <- renderGvis({
       #gvisLineChart(crypto) 
       gvisLineChart(crypto_active[,c(1,2,3)],
-                    options=list(title = "Coins initiations on coinmarketcap.com 2014-2017",
+                    options=list(title = "Coins initiations on CoinMarketCap.com 2014-2017",
                                  legend="top",
                                  series="{0: { labelInLegend: 'Total active coins' },
                                  1: { labelInLegend: 'Monthly coins initiations' },
