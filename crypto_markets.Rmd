@@ -189,7 +189,7 @@ crypto_trade_price[crypto_trade_price$symbol=="FLDC" &
 
 # calculate coin holding on any given date
 crypto_coin_holding <- crypto_trade_price %>%
-  mutate(holding= ifelse(trade_price!=Inf, close / trade_price, 0))
+  mutate(holding= ifelse(date>=trade_date, close / trade_price, 0)) # holding should be 0 before trade happens
 
 ```
 
@@ -210,7 +210,7 @@ cat("Total holdings, no bitcoin: \n", b, "\n")
 c <- sum(crypto_coin_holding[crypto_coin_holding$date==as.Date("2017-09-28") & 
                                crypto_coin_holding$symbol!="BTC" &
                                crypto_coin_holding$symbol!="ETH",c("holding")])
-cat("Total holdings, no bitcoin: \n", c, "\n")
+cat("Total holdings, no BTC/ ETH: \n", c, "\n")
 
 ```
 
@@ -226,17 +226,18 @@ holdings <- crypto_coin_holding %>%
 
 holdings
 
-holdings %>% ggplot(aes(x = "", y= holding_coin_perc, fill=coin)) + geom_bar(stat = "identity") + coord_polar(theta = "y")
-
 ```
 
-```{r}
+```{r Portfolio Pie Chart }
 # need to reorder fill factor levels in inverse order of appearance (see next chunk)
 holdings %>% ggplot(aes(x = "", y= holding_coin_perc, fill=factor(coin, levels = as.list(coin_order)$coin))) + 
-  geom_bar(stat = "identity") + coord_polar(theta = "y")
+  geom_bar(stat = "identity") + 
+  coord_polar(theta = "y") +
+  ggtitle("Portfolio holdings on 9/28 - Dollar Averaging") +
+  theme(plot.title = element_text(hjust = 0.5))
 ```
 
-```{r}
+```{r echo=FALSE}
 # coin ordering for pie chart
 coin_order <- crypto_coin_holding %>%
   group_by(date) %>%
@@ -249,6 +250,35 @@ coin_order <- crypto_coin_holding %>%
   select(coin)
 
 as.list(coin_order)$coin
+```
+
+```{r Coin holdings & cash}
+# holdings per coin and total with cash
+holdings_cash <- crypto_coin_holding %>%
+  group_by(date) %>%
+  mutate(cash=-sum(trade_price!=Inf & date >= trade_date)) %>%
+  mutate(Total_holdings=sum(holding)+cash) %>%
+  mutate(holding_coin_perc=holding/(Total_holdings-cash)*100) %>%  # % of coin assets only (excluding cash)
+  arrange(desc(date))
+  
+holdings_cash %>%
+  filter(holding_coin_perc>1) %>%
+  ggplot(aes(x=date)) + 
+  geom_line(aes(y=holding, group=symbol)) +
+  geom_line(aes(y=Total_holdings, color = "Total Holdings (coins + cash)")) + 
+  geom_line(aes(y=cash, color = "Cash invested"))
+```
+
+```{r Coin holdings ~ volume}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
 ```
 
 ```{r}
