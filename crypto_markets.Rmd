@@ -105,8 +105,8 @@ coins201310 <-crypto %>%
 
 difference <- coins201311 %>% anti_join(coins201310, by = "coin")
 
-newcoins201311 <- crypto_initiation_date_price %>%
-  filter(grepl("2013-11", initiation_date)) %>%
+newcoins201311 <- crypto %>%
+  filter(grepl("2013-11", date)) %>%
   distinct(coin)
 
 difference %>% anti_join(newcoins201311, by = "coin") # Bottlecaps not explained by coin initiations
@@ -229,15 +229,6 @@ holdings
 ```
 
 ```{r Portfolio Pie Chart }
-# need to reorder fill factor levels in inverse order of appearance (see next chunk)
-holdings %>% ggplot(aes(x = "", y= holding_coin_perc, fill=factor(coin, levels = as.list(coin_order)$coin))) + 
-  geom_bar(stat = "identity") + 
-  coord_polar(theta = "y") +
-  ggtitle("Portfolio holdings on 9/28 - Dollar Averaging") +
-  theme(plot.title = element_text(hjust = 0.5))
-```
-
-```{r echo=FALSE}
 # coin ordering for pie chart
 coin_order <- crypto_coin_holding %>%
   group_by(date) %>%
@@ -249,7 +240,12 @@ coin_order <- crypto_coin_holding %>%
   ungroup() %>%
   select(coin)
 
-as.list(coin_order)$coin
+# need to reorder fill factor levels in inverse order of appearance (see next chunk)
+holdings %>% ggplot(aes(x = "", y= holding_coin_perc, fill=factor(coin, levels = as.list(coin_order)$coin))) + 
+  geom_bar(stat = "identity") + 
+  coord_polar(theta = "y") +
+  ggtitle("Portfolio holdings on 9/28 - Dollar Averaging") +
+  theme(plot.title = element_text(hjust = 0.5))
 ```
 
 ```{r Coin holdings & cash}
