@@ -197,21 +197,6 @@ crypto_coin_holding <- crypto_trade_price %>%
 # % of coins bought
 perc <- dim(crypto_trade_date[crypto_trade_date$trade_date!=Sys.Date()+1,])[1]/dim(crypto_trade_date)[1]*100
 cat("Percentage of coins bought (based on volume threshold): \n", perc, "\n")
-
-# Total Holdings (2017-09-28)
-a <- sum(crypto_coin_holding[crypto_coin_holding$date==as.Date("2017-09-28"),c("holding")])
-cat("Total holdings: \n", a, "\n")
-
-# Total Holdings - no BTC
-b <- sum(crypto_coin_holding[crypto_coin_holding$date==as.Date("2017-09-28") & crypto_coin_holding$symbol!="BTC",c("holding")])
-cat("Total holdings, no bitcoin: \n", b, "\n")
-
-# Total Holdings - no BTC/ ETH
-c <- sum(crypto_coin_holding[crypto_coin_holding$date==as.Date("2017-09-28") & 
-                               crypto_coin_holding$symbol!="BTC" &
-                               crypto_coin_holding$symbol!="ETH",c("holding")])
-cat("Total holdings, no BTC/ ETH: \n", c, "\n")
-
 ```
 
 ```{r Portfolio Pie Chart}
@@ -257,6 +242,12 @@ holdings_cash <- crypto_coin_holding %>%
   mutate(holding_coin_perc=holding/(Total_holdings-cash)*100) %>%  # % of coin assets only (excluding cash)
   arrange(desc(date))
   
+# Return Percentage
+return <- -100 *(holdings_cash$Total_holdings[1] - holdings_cash$cash[1]) / holdings_cash$cash[1]
+cat("Percentage return: ", return, "\n")
+```
+
+```{r}
 holdings_cash %>%
   filter(holding_coin_perc>1) %>%
   ggplot(aes(x=date)) + 
@@ -267,18 +258,79 @@ holdings_cash %>%
 
 ```{r Coin holdings ~ volume}
 
+Holdings_from_volume <- function(crypto, volume_threshold=100000, symbols_to_exclude=list("")) {
+  #returns a list with the total final holding and the percentage return on the invested cash
+
+# define trade date
+crypto_trade_date <- crypto %>% 
+  group_by(coin) %>%  
+  arrange(date, coin) %>%
+  mutate(trade_date=Robustmin(date[volume>volume_threshold])) # add trade_date
+
+# get trade price at trade date (close of the day). Check that a date exist and that the price is not 0
+crypto_trade_price <- crypto_trade_date %>%
+  mutate(trade_price=ifelse(length(close[date==trade_date])==1,ifelse(close[date==trade_date]!=0,close[date==trade_date],Inf),Inf))
+
+# calculate coin holding on any given date
+crypto_coin_holding <- crypto_trade_price %>%
+  filter(!(symbol %in% symbols_to_exclude)) %>%    # add filter: symbol in arguments
+  mutate(holding= ifelse(date>=trade_date, close / trade_price, 0)) # holding should be 0 before trade happens
+
+# holdings per coin and total with cash
+holdings_cash <- crypto_coin_holding %>%
+  group_by(date) %>%
+  mutate(cash=-sum(trade_price!=Inf & date >= trade_date)) %>%
+  mutate(Total_holdings=sum(holding)+cash) %>%
+  mutate(holding_coin_perc=holding/(Total_holdings-cash)*100) %>%  # % of coin assets only (excluding cash)
+  arrange(desc(date))
+
+# return total holding value (last date)
+# a <- holdings_cash[holdings_cash$date==as.Date("2017-09-28"),c("Total_holdings")] # core R
+total_holding <- holdings_cash %>%  distinct(date,Total_holdings)
+
+#cat("Total holdings: \n", total_holding$Total_holdings[1], "\n")
+c(as.numeric(total_holding$Total_holdings[1]),
+     -100 *(holdings_cash$Total_holdings[1] - holdings_cash$cash[1]) / holdings_cash$cash[1])
+}
+
+Holdings_from_volume(crypto, 100000, "")
+Holdings_from_volume(crypto, 100000, list("BTC", "ETH"))
+
+
 ```
 
 ```{r}
+# Total holdings obtained as a function of volume treshold
+n <- 0:9
+vol_vec <- c(1000*((3)^n))
+vol_vec
+hold_vec <- sapply(vol_vec, function(x) {Holdings_from_volume(crypto, x)})
+hold_vec
+hold_vec[1,c(1,2)]
+hold_vec[2,1:2]
+
+df <- data.frame(vol_vec,hold_vec[1,1:length(vol_vec)],hold_vec[2,1:length(vol_vec)])
+
+ggplot(df, aes(vol_vec)) +                  
+  geom_line(aes(y=hold_vec[1,1:length(vol_vec)]), colour="red") + ylab("Total Holdings ($)") + xlab("Buy volume threshold")
+
+ggplot(df, aes(vol_vec)) + 
+  geom_line(aes(y=hold_vec[2,1:length(vol_vec)]), colour="green") + ylab("Total Return (%)") + xlab("Buy volume threshold")
+
 
 ```
 
 ```{r}
+# reactive ggvis
+
 
 ```
 
 ```{r}
-
+test <- function(x) {
+  list(x+1, x-1)
+}
+test(3)[[2]]
 ```
 
 ```{r Selling: RSI/ volume?}
