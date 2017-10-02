@@ -11,7 +11,9 @@ library(dplyr)
 library(ggplot2)
 
 #setwd("/Users/Quentin/Documents/Kaggle/cryto_markets/shinyDBCrypto")
-raw.crypto <- fread("../crypto.csv", stringsAsFactors = F)
+#raw.crypto <- fread("crypto.csv", stringsAsFactors = F)
+raw.crypto <- fread(file.choose(), stringsAsFactors = F)
+
 crypto <- as.data.table(raw.crypto)
 crypto <- na.omit(crypto)
 print("test")

@@ -256,6 +256,44 @@ holdings_cash %>%
   geom_line(aes(y=cash, color = "Cash invested"))
 ```
 
+```{r}
+
+# holdings_cash %>%
+#   filter(holding_coin_perc>1) %>%
+#   ggplot(aes(x=date)) + 
+#   geom_line(aes(y=holding, group=symbol)) +
+#   geom_line(aes(y=Total_holdings, color = "Total Holdings (coins + cash)")) + 
+#   geom_line(aes(y=cash, color = "Cash invested"))
+
+library(ggvis)
+#holdings_cash$id <- 1:nrow(holdings_cash) # create index so key is unique for tooltip - doesn't work
+
+# do not use scientific notation
+#options("scipen" = 10)
+
+symbol_tooltip <- function(x) {
+  if (is.null(x)) return(NULL)
+  # cat(format(x[[1]], ), x[[2]], x[[3]])
+  
+  paste0(names(x)[3],": <b>", x[[3]], "</b><br>",
+         names(x)[2], ": ", x[[2]], "<br>")
+}
+
+holdings_cash %>%
+  group_by(coin) %>% 
+  filter(max(holding_coin_perc)>5) %>%# only coins that at some point where >5% of the total holdings
+  ggvis(x = ~date, y = ~holding, fill = ~coin) %>%
+  add_tooltip(symbol_tooltip, on = "hover") %>%
+  layer_points(size := 10, 
+               size.hover := 200,
+               fillOpacity := 1, 
+               fillOpacity.hover := 0.5) %>% 
+  hide_legend('fill') 
+
+#  filter(date>min(holdings_cash$date) & date<max(holdings_cash$date))
+
+```
+
 ```{r Coin holdings ~ volume}
 
 Holdings_from_volume <- function(crypto, volume_threshold=100000, symbols_to_exclude=list("")) {
@@ -324,13 +362,11 @@ ggplot(df, aes(vol_vec)) +
 # reactive ggvis
 
 
+
 ```
 
 ```{r}
-test <- function(x) {
-  list(x+1, x-1)
-}
-test(3)[[2]]
+
 ```
 
 ```{r Selling: RSI/ volume?}
