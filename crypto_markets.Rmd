@@ -17,8 +17,13 @@ When you click the **Knit** button a document will be generated that includes bo
 library(data.table)
 library(dplyr)
 library(ggplot2)
+library(ggvis)
+library(ggfortify)
+library(xts)
+library(quantmod)
+library(forecast)
 getwd()
-raw.crypto <- fread("./crypto.csv", stringsAsFactors = F)
+raw.crypto <- fread("./shinyDBCrypto/crypto.csv", stringsAsFactors = F)
 crypto <- as.data.table(raw.crypto)
 crypto <- crypto[!is.na(date)] # remove 4 NA records
 crypto <- na.omit(crypto)
@@ -34,6 +39,8 @@ str(crypto)
 
 ```{r}
 crypto$volume <- as.numeric(crypto$volume)
+crypto$market <- as.numeric(crypto$market)
+
 ```
 
 ```{r}
@@ -68,7 +75,7 @@ crypto_active <- crypto[,
             initiations=sum(first_month=="yes"), 
             discontinuations=sum(last_month=="yes"))
 
-View(crypto_active)
+#View(crypto_active)
 crypto_active %>%
   ggplot(aes(x=month, y=value)) + 
   geom_line(aes(y=active, col="Monthly active coins"), group=1) +
@@ -256,20 +263,8 @@ holdings_cash %>%
   geom_line(aes(y=cash, color = "Cash invested"))
 ```
 
-```{r}
-
-# holdings_cash %>%
-#   filter(holding_coin_perc>1) %>%
-#   ggplot(aes(x=date)) + 
-#   geom_line(aes(y=holding, group=symbol)) +
-#   geom_line(aes(y=Total_holdings, color = "Total Holdings (coins + cash)")) + 
-#   geom_line(aes(y=cash, color = "Cash invested"))
-
-library(ggvis)
-#holdings_cash$id <- 1:nrow(holdings_cash) # create index so key is unique for tooltip - doesn't work
-
-# do not use scientific notation
-#options("scipen" = 10)
+```{r market cap evolution graph}
+# Graph - market cap evolution
 
 symbol_tooltip <- function(x) {
   if (is.null(x)) return(NULL)
@@ -279,16 +274,41 @@ symbol_tooltip <- function(x) {
          names(x)[2], ": ", x[[2]], "<br>")
 }
 
-holdings_cash %>%
-  group_by(coin) %>% 
-  filter(max(holding_coin_perc)>5) %>%# only coins that at some point where >5% of the total holdings
-  ggvis(x = ~date, y = ~holding, fill = ~coin) %>%
+# Coin filter
+coin_filter <- holdings_cash %>%
+  group_by(coin) %>%
+  summarise(MC_threshold=max(market)) %>% 
+  filter(MC_threshold>1e7)
+
+#View(inner_join(holdings_cash, coin_filter, by= "coin"))
+  
+inner_join(holdings_cash, coin_filter, by= "coin") %>%
+  ggvis(x = ~date, y = ~market, fill = ~coin) %>%
   add_tooltip(symbol_tooltip, on = "hover") %>%
   layer_points(size := 10, 
                size.hover := 200,
                fillOpacity := 1, 
                fillOpacity.hover := 0.5) %>% 
   hide_legend('fill') 
+```
+```{r Holdings graph}
+
+#holdings_cash$id <- 1:nrow(holdings_cash) # create index so key is unique for tooltip - doesn't work
+
+# do not use scientific notation
+#options("scipen" = 10)
+
+# Graph - holdings per coin
+# holdings_cash %>%
+#   group_by(coin) %>% 
+#   filter(max(holding_coin_perc)>5) %>%# only coins that at some point where >5% of the total holdings
+#   ggvis(x = ~date, y = ~holding, fill = ~coin) %>%
+#   add_tooltip(symbol_tooltip, on = "hover") %>%
+#   layer_points(size := 10, 
+#                size.hover := 200,
+#                fillOpacity := 1, 
+#                fillOpacity.hover := 0.5) %>% 
+#   hide_legend('fill') 
 
 #  filter(date>min(holdings_cash$date) & date<max(holdings_cash$date))
 
@@ -358,10 +378,139 @@ ggplot(df, aes(vol_vec)) +
 
 ```
 
+
+```{r Return All Coins ~ BTC}
+# filter last 12 months of data
+coins_12m <- holdings_cash %>%
+  filter(date > (as.Date("2017-09-28")-365)) %>%
+  arrange(date)
+
+# creation of return (with filter to avoid outliers)
+  # filter(volume > 5000) %>%
+  # mutate(daily_return=ifelse(open==0,1,(close-open)/open)) # return (not %)
+
+# Time Series
+
+# zoo 
+days <- seq(min(coins_12m$date), max(coins_12m$date), by = "day")
+btc <- zoo(coins_12m[coins_12m$symbol=="BTC", "open"], days)
+btc.full <- zoo(coins_12m[coins_12m$symbol=="BTC", c("open", "high", "low", "close", "volume")], days) # with all info
+# View(btc.full)
+
+eth <- zoo(coins_12m[coins_12m$symbol=="ETH", "close"], days)
+#class(btc) # zoo
+autoplot(btc, main = "Bitcoin price - Past year")
+plot(btc, main = "Bitcoin price - Past year")
+
+plot(as.zoo(btc_eth), screens = 1, lty = 1:2, xlab = "Date", ylab = "Closing price")
+legend("topleft", c("btc", "eth"), lty = 1:2, cex = 0.5)
+
+# ts - plot works but x axis to fix
+# btc_ts <- ts(coins_12m[coins_12m$symbol=="BTC", "close"],
+#            start = c(2016, as.numeric(format(days[1], "%j"))),
+#            frequency = 365)
+# autoplot(btc_ts) # x axis format to fix
+
+```
+
 ```{r}
-# reactive ggvis
+
+btc_eth <- as.xts(data.frame(btc_col = btc, 
+                             eth_col = eth))
+
+colnames(btc_eth) <- c("btc_close", "eth_close")
+head(btc_eth)
+```
+
+```{r Returns analysis}
+# calculate returns - Method #1
+quantmod::Delt(btc_eth[, "btc_close"]) %>% head #  period pct. price change - is xts
+quantmod::Delt(as.xts(btc[, "close"])) %>% head #  period pct. price change
+
+# method #2 - vectorized formula
+n <- nrow(btc)
+apply(btc, 2, function (x) { diff(x)/x[-length(x)] }) %>% head
+
+# For n coins (method #2)
+btc_eth_returns <- as.xts(apply(btc_eth, 2, function (x) { diff(x)/x[-length(x)] }))
+btc_eth_returns %>% head
+
+plot(as.zoo(btc_eth_returns), screens = 1, lty = 1:2, xlab = "Date", ylab = "Return")
+legend("topleft", c("Bitcoin", "Ether"), lty = 1:2, cex = 0.5)
 
 
+```
+
+```{r}
+# boxplot BTC ~ ETH (back to vectors ? better function to use ?)
+eth_decile <- cut(as.vector(btc_eth_returns[,2]), 10)
+boxplot(as.vector(btc_eth_returns[,1]) ~ eth_decile,  # need to convert back to vectors
+        main = "% return BTC ~ ETH")
+
+
+# next step: all altcoins ~ BTC
+```
+
+```{r}
+# adding day of the month column 
+coins_12m$mday <- format(coins_12m$date, "%d")
+
+# calculate BTC returns on original dataframe
+btc_returns_vec <- apply(coins_12m[coins_12m$symbol=="BTC",c("close")], 2, function (x) { diff(x)/x[-length(x)] }) 
+btc_returns_vec <- c(0, btc_returns_vec) # add 0 because first return can't be calculated
+
+# Scatter plot BTC returns ~ day of the month
+plot(btc_returns_vec ~ as.matrix(coins_12m[coins_12m$symbol=="BTC", "mday"]), 
+     xlab = "Day (1-365)", 
+     main = "Distribution of BTC returns according day of the month")
+
+# boxplot better
+boxplot(btc_returns_vec ~ as.matrix(coins_12m[coins_12m$symbol=="BTC", "mday"]), 
+     xlab = "Day (1-365)", 
+     main = "Distribution of BTC returns according day of the month")
+# Conclusion: no strong correlation (idea that returns are higher early in the month not backed by the data)
+
+# is there a better way? (built-in function)
+ggsubseriesplot(as.ts(btc_eth_returns[,1]), # how to show returns per day of the month
+                main = "BTC ")
+
+
+```
+
+```{r}
+
+```
+
+
+```{r}
+# log difference 
+btc_eth %>% log %>% diff %>% head
+
+plot(as.zoo(btc_eth %>% log %>% diff), screens = 1, lty = 1:2, xlab = "Date", ylab = "Log Difference")
+legend("topleft", c("btc", "eth"), lty = 1:2, cex = 0.5)
+```
+
+```{r}
+# BTC candlestick chart with moving average
+candleChart(btc.full, type = "candlesticks", up.col = "black", dn.col = "red", theme = "white")
+addSMA(n = c(20, 50, 200))
+```
+
+```{r}
+start <- as.Date("2016-01-01")
+end <- as.Date("2016-10-01")
+getSymbols("AAPL", src = "yahoo", from = start, to = end, adjust = FALSE)
+
+AAPL %>% head
+candleChart(AAPL, up.col = "black", dn.col = "red", theme = "white")
+
+```
+
+```{r}
+
+```
+
+```{r}
 
 ```
 
