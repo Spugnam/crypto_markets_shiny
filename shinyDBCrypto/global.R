@@ -12,7 +12,7 @@ library(ggplot2)
 
 #setwd("/Users/Quentin/Documents/Kaggle/cryto_markets/shinyDBCrypto")
 raw.crypto <- fread("crypto.csv", stringsAsFactors = F)
-raw.crypto <- fread(file.choose(), stringsAsFactors = F) #doesn't work for publishing - use .csv file in same directory per https://github.com/yihui/knitr/blob/master/man/knit.Rd#L104-L107
+#raw.crypto <- fread(file.choose(), stringsAsFactors = F) #doesn't work for publishing - use .csv file in same directory per https://github.com/yihui/knitr/blob/master/man/knit.Rd#L104-L107
 
 crypto <- as.data.table(raw.crypto)
 crypto <- na.omit(crypto)
