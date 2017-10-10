@@ -11,11 +11,12 @@ shinyUI(dashboardPage(
         sidebarMenu(
             menuItem("Map", tabName = "map", icon = icon("map")),
             menuItem("Data", tabName = "data", icon = icon("database"))
-        ),
-        selectizeInput("selected",
-                       "Select Item to Display",
-                       choice, 
-                       selected = "close")
+        )
+        #,
+        # selectizeInput("selected",
+        #                "Select Item to Display",
+        #                choice, 
+        #                selected = "close")
     ),
     dashboardBody(
         tags$head(

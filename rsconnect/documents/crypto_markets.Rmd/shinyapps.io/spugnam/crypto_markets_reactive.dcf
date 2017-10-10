@@ -1,0 +1,12 @@
+name: crypto_markets_reactive
+title: crypto_markets_reactive
+username:
+account: spugnam
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 223724
+bundleId: 1019873
+url: https://spugnam.shinyapps.io/crypto_markets_reactive/
+when: 1507664307.02081
+asMultiple: TRUE
+asStatic: FALSE

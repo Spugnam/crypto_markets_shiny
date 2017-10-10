@@ -5,15 +5,20 @@ date: "October 7, 2017"
 output: html_document
 ---
 
+### Introduction
+
+The goal of this document is to provide an overview of crypto currencies, or "coins". The Bitcoin white paper was written in late 2008 but today many more currencies than Bitcoin exist. Some of the questions we will answer include: what are the coins relative importance (by total value)? How have prices behaved in the last few years? How would basic investing strategies have performed during that timeframe? 
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r global_options, include=FALSE}
+# set up global Knit options for all chunks
 knitr::opts_chunk$set(fig.width=6, fig.height=4, fig.align = "center", include=FALSE, echo=FALSE, warning=FALSE, message=FALSE, cache=T)
 ```
 
-```{r Libraries, eval=T}
+```{r Libraries}
 library(data.table)
 library(dplyr)
 library(ggplot2)
@@ -26,14 +31,14 @@ library(forecast)
 ```
 
 
-```{r Data_load, echo=F, cache=F, warning=F, eval=T}
-raw.crypto <- read.csv("./crypto.csv", stringsAsFactors = F) #fread("./crypto.csv", stringsAsFactors = F) not working w Knit?
-crypto <- raw.crypto #as.data.table(raw.crypto)
+```{r Data_load}
+raw.crypto <- read.csv("./crypto.csv", stringsAsFactors = F) 
+#fread("./crypto.csv", stringsAsFactors = F) not working anymore w Knit?
+crypto <- raw.crypto 
 crypto <- crypto[!is.na(date)] # remove 4 NA records
 crypto <- na.omit(crypto)
 ```
-
-# Data 
+### Data 
 The data file studied here contains OHLC (Open-High-Low-Close) data for about 1100 crypto currencies during the last 5 years. The data was scrapped from https://coinmarketcap.com/ by [Jvent](https://www.kaggle.com/jessevent) and uploaded to Kaggle.
 
 Source file: 
@@ -45,6 +50,7 @@ crypto %>% head(5)
 ```
 
 ```{r}
+# Checking format of imported columns
 str(crypto)
 ```
 
@@ -92,7 +98,7 @@ dim(test[test$date != 1,]) # no holes (at least one coin per date)
 ```
 
 ```{r MissingMarketCap}
-# 0 market caps
+# 0 market caps despite close price > 0 and some volume
 crypto %>%
   filter(market==0) %>% 
   filter(close>0) %>% # price not 0
@@ -102,6 +108,7 @@ crypto %>%
 ```
 
 ```{r SmallMarketCap}
+# Calculate figures for commentary just below
 null_mc <- dim(crypto[crypto$date=="2017-09-28" & crypto$market==0,])[1]
 null_mc
 small_mc <- dim(crypto[crypto$date=="2017-09-28" & crypto$market<=1e6,])[1]
@@ -116,7 +123,7 @@ small_mc_perc
 ### Market Capitalisation Distribution
 
 Looking at the distribution of coin market caps, we observe a large skew towards smaller valuations. 
-In fact `r null_mc` (`r null_mc_perc`%) of coins have no market capitalisation as of September 28th, 2017. 
+In fact `r null_mc` (`r null_mc_perc`%) of coins have no market capitalisation as of September 28th, 2017 (the market cap reported by the website is $0). 
 `r small_mc` (`r small_mc_perc`%) have a market cap below $1 million.
 ```{r MarketCap_Hist, include=T, cache=T}
 # "Present" Market Cap histogram (latest day)
@@ -124,12 +131,15 @@ crypto[crypto$date=="2017-09-28",] %>%
   ggplot(aes(x = market)) + 
   geom_histogram(binwidth = 1e6) + coord_cartesian(xlim = c(0, 1e8)) +
   ggtitle("Distribution of coin market caps") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
   scale_x_continuous(name ="Coin market capitalization", breaks = c(1e6,2.5e7,1e8, 1e9), labels = scales::comma) +
   scale_y_continuous(name ="Number of coins")
 
 # breaks = c(1e6,2.5e7,1e8, 1e9), limits=c("1,000,000","25,000,000","100,000,000", "1,000,000,000"))
 
 # Taking log and removing coins without 0 market cap
+# For now commenting log price distribution as unable to explain clearly
+
 # crypto[crypto$date=="2017-09-28" & crypto$market != 0,] %>% 
 #   ggplot(aes(x = log(market+1))) + 
 #   geom_histogram(binwidth = 0.1) #+ coord_cartesian(xlim = c(55, 70))
@@ -140,18 +150,7 @@ crypto[crypto$date=="2017-09-28",] %>%
 The following graph shows the constant rise of reported coins. We observe some volatility in the number of new coins in last few months. One factor was China's decision to ban initial coin offerings (ICOs) on September, 4th.
 Today the pace of new ICOs globally is still strong.
 ```{r Montly_coin_count, include=T}
-#View(crypto)
-# crypto_active <- crypto[, 
-#                         .(date, month=format(date,"%Y%m"),
-#                           first_month=ifelse(date==min(date),"yes", "no"), 
-#                           last_month=ifelse(date==max(date) & format(date, "%Y%m")!="201709","yes", "no")),
-#                         by=.(coin)] %>%
-#   ungroup() %>%
-#   group_by(month) %>%
-#   summarise(active=n_distinct(coin), 
-#             initiations=sum(first_month=="yes"), 
-#             discontinuations=sum(last_month=="yes"))
-
+# Create data.frame for graph
 crypto_active <- crypto %>% 
   group_by(coin) %>% 
   mutate(month=format(date,"%Y%m")) %>%
@@ -163,11 +162,6 @@ crypto_active <- crypto %>%
             initiations=sum(first_month=="yes"), 
             discontinuations=sum(last_month=="yes"))
 
-#crypto$month <- 
-# str(crypto_active$month)
-# as.yearmon(crypto$date, "%y%m") %>% class
-
-#View(crypto_active)
 crypto_active %>%
   ggplot(aes(x=month, y=value)) + 
   geom_line(aes(y=active, col="Monthly active coins"), group=1) +
@@ -221,6 +215,7 @@ crypto %>%
 ```
 
 ```{r holdings_cash, cache=T}
+# Defining df holdings_cash (used in later analysis)
 
 # setting a volume threshold at which to buy
 volume_threshold <- 100000
@@ -254,13 +249,11 @@ holdings_cash <- crypto_coin_holding %>%
 ### Coins Market Cap graph
 
 This graph shows the evolution of each coin total market cap over time. 
-```{r MarketCapGraph, include=T, fig.width=12, fig.height=8}
+```{r MarketCapGraph, include=T, fig.width=12, fig.height=8, cache=F}
 # Graph - market cap evolution
 options("scipen" = 10)
-# TO DO: https://stackoverflow.com/questions/32583129/ggvis-multiple-lines-with-tooltips to fix date format
 symbol_tooltip <- function(x) {
   if (is.null(x)) return(NULL)
-  # cat(x[[1]], x[[2]], x[[3]])
   
   paste0(names(x)[3],": <b>", x[[3]], "</b><br>", # Coin
          "Market Cap: ", format(x[[2]],big.mark=",", trim=TRUE), "<br>", # Market cap
@@ -271,20 +264,46 @@ symbol_tooltip <- function(x) {
 coin_filter <- holdings_cash %>%
   group_by(symbol) %>%
   summarise(MC_threshold=max(market)) %>% 
-  filter(MC_threshold>1e9)
+  filter(MC_threshold>2e9)
 
-#  ************ Coin Market Cap liens with tooltip ************
-# Uses both lines and points (transparent) so point give right date
-inner_join(holdings_cash, coin_filter, by= "symbol") %>%
+#  ************ Coin Market Cap lines with tooltip ************
+# Uses both lines and (transparent) points so point give right date
+# inner_join(holdings_cash, coin_filter, by= "symbol") %>%
+#   ggvis(x = ~date, y = ~market, stroke = ~symbol) %>%
+#   ggvis::add_axis("x", title = "Date") %>%
+#   ggvis::add_axis("y", title = "Market Cap (Billions)", title_offset = 100) %>%
+#   layer_lines(strokeWidth := 1) %>%
+#   layer_points(size = 1, fill = ~symbol, opacity := 0) %>%
+#   add_tooltip(symbol_tooltip, on = "hover") %>%  
+#   hide_legend('fill') %>%
+#   hide_legend('stroke')
+
+# Can't seem to publish when this is one (works fine on local browser..)
+# reactive({
+#   inner_join(holdings_cash, coin_filter, by= "symbol") %>%
+#     ggvis(x = ~date, y = ~market, stroke = ~symbol) %>%
+#     ggvis::add_axis("x", title = "Date") %>%
+#     ggvis::add_axis("y", title = "Market Cap (Billions)", title_offset = 100) %>%
+#     layer_lines(strokeWidth := 1) %>%
+#     layer_points(size = 1, fill = ~symbol, opacity := 0) %>%
+#     add_tooltip(symbol_tooltip, on = "hover") %>%  
+#     hide_legend('fill') %>%
+#     hide_legend('stroke')
+# }) %>% bind_shiny("plot1")
+# ggvisOutput("plot1")
+
+df <- inner_join(holdings_cash, coin_filter, by= "symbol")
+
+df %>%
   ggvis(x = ~date, y = ~market, stroke = ~symbol) %>%
+  ggvis::add_axis("x", title = "Date") %>%
+  ggvis::add_axis("y", title = "Market Cap (Billions)", title_offset = 100) %>%
   layer_lines(strokeWidth := 1) %>%
   layer_points(size = 1, fill = ~symbol, opacity := 0) %>%
-  add_tooltip(symbol_tooltip, on = "hover") %>%  #commented to be able to run all file
+  add_tooltip(symbol_tooltip, on = "hover") %>%
   hide_legend('fill') %>%
   hide_legend('stroke')
 
-# add_axis("x", title = "Date") %>%  # doesn't work? unused argument (title = "Date")
-  # add_axis("y", title = "Market Cap (billions)")
 
 ```
 
@@ -307,6 +326,9 @@ inner_join(holdings_cash, coin_filter, by= "symbol") %>%
   mutate(market_prop = market/sum(market)) %>% 
   ggplot(aes(x=date, y=market_prop, fill=factor(symbol, levels = as.list(coin_order2)$symbol))) + 
   geom_area(alpha=1 , size=1) + 
+  ggtitle("Market Cap Dominance") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(x = "Date") + 
   scale_y_continuous(name ="Proportion of Total Market Cap") +
   guides(fill=guide_legend(title="Top coins by Market Cap"))
 
@@ -333,24 +355,18 @@ crypto_norm_volume <- crypto_norm %>% group_by(coin) %>% mutate(avg_volume=mean(
 
 library(gridExtra)
 
-p1 <- crypto_norm_volume[,] %>%
+crypto_norm_volume[,] %>%
   filter(avg_volume > 100000) %>%
   ggplot() + 
   geom_line(aes(x=relative_date, y=log(relative_price+1), group=symbol)) + 
-  labs(x = "Date") + ylab("Coin Prices (Log)")
-p2 <- crypto_norm_volume[,] %>%
-  filter(avg_volume > 100000) %>%
-  ggplot() + 
-  geom_line(aes(x=relative_date, y=log(relative_price+1), group=symbol)) + coord_polar() + 
-  labs(x = "Date") + ylab("Log of coin prices")
-
-#grid.arrange(p1, p2, ncol = 2, top = "Log coin price series")
-p1
+  labs(x = "Date") + ylab("Coin Prices (Log)") +
+  ggtitle("Coin Price Series (Log)") +
+  theme(plot.title = element_text(hjust = 0.5))
 
 ```
 
 ```{r dollar averaging}
-
+# Checks
 # Tests on trading date
 crypto_trade_date[crypto_trade_date$coin=="808Coin" & 
                     (crypto_trade_date$date == crypto_trade_date$trade_date |
@@ -362,7 +378,7 @@ crypto_trade_price[crypto_trade_price$symbol=="FLDC" &
                     (crypto_trade_price$date == crypto_trade_price$trade_date |
                        crypto_trade_price$date == crypto_trade_price$trade_date -1 |
                        crypto_trade_price$date == crypto_trade_price$trade_date +1),]
-# Conclusion: need to look into coins with volume > threshold but price = 0 (e.g. FLDC)
+# Conclusion: would need to look into coins with volume > threshold but price = 0 (e.g. FLDC)
 ```
 
 ```{r Stats}
@@ -387,7 +403,7 @@ holdings
 
 ### Trading Strategies
 In order to better understand the behavior of these coins, I implemented a basic dollar averaging trading strategy. Starting 5 years ago when data is available, everytime the daily trading volume passes a certain threshold ($100,000 to start) for a given coin, I buy $1 of it and hold it forever. 
-The composition of the portfolio on September 28th, 2017 is shown below:
+The composition of the portfolio on the last day where data is available (September 28th, 2017) is shown below:
 
 ```{r DollarAveragingPieChart, include=T, fig.width=9, fig.height=6}
 # coin ordering for pie chart
@@ -414,8 +430,7 @@ holdings %>% ggplot(aes(x = "", y= holding_coin_perc, fill=factor(coin, levels =
 Conclusion: 50% of the portfolio is made of just 6 coins. Stratis, the biggest position, went up 200,000 times. The next step would be to check if those coins indeed could have been purchased at the initial 'low' prices reported on Coinmarketcap.com. Historical exchange data would be needed for this.
 
 ```{r PortfolioReturn}
-
-# Return Percentage
+# Portfolio Return Percentage
 return <- -100 *(holdings_cash$Total_holdings[1] - holdings_cash$cash[1]) / holdings_cash$cash[1]
 cat("Percentage return: ", return, "\n")
 ```
@@ -429,44 +444,47 @@ holdings_cash %>%
   geom_line(aes(y=cash, color = "Cash invested")) +
   labs(color='Legend') +
   ggtitle("Value of Portfolio over time") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
   labs(x = "Date") + ylab("Value ($)")
 ```
 
 ```{r Coin holdings ~ volume}
+# Function to calculate final portfolio value and return on the invested cash
+# TO DO: refactor for space efficiency
 
 Holdings_from_volume <- function(crypto, volume_threshold=100000, symbols_to_exclude=list("")) {
   #returns a list with the total final holding and the percentage return on the invested cash
-
-# define trade date
-crypto_trade_date <- crypto %>% 
-  group_by(coin) %>%  
-  arrange(date, coin) %>%
-  mutate(trade_date=Robustmin(date[volume>volume_threshold])) # add trade_date
-
-# get trade price at trade date (close of the day). Check that a date exist and that the price is not 0
-crypto_trade_price <- crypto_trade_date %>%
-  mutate(trade_price=ifelse(length(close[date==trade_date])==1,ifelse(close[date==trade_date]!=0,close[date==trade_date],Inf),Inf))
-
-# calculate coin holding on any given date
-crypto_coin_holding <- crypto_trade_price %>%
-  filter(!(symbol %in% symbols_to_exclude)) %>%    # add filter: symbol in arguments
-  mutate(holding= ifelse(date>=trade_date, close / trade_price, 0)) # holding should be 0 before trade happens
-
-# holdings per coin and total with cash
-holdings_cash <- crypto_coin_holding %>%
-  group_by(date) %>%
-  mutate(cash=-sum(trade_price!=Inf & date >= trade_date)) %>%
-  mutate(Total_holdings=sum(holding)+cash) %>%
-  mutate(holding_coin_perc=holding/(Total_holdings-cash)*100) %>%  # % of coin assets only (excluding cash)
-  arrange(desc(date))
-
-# return total holding value (last date)
-# a <- holdings_cash[holdings_cash$date==as.Date("2017-09-28"),c("Total_holdings")] # core R
-total_holding <- holdings_cash %>%  distinct(date,Total_holdings)
-
-#cat("Total holdings: \n", total_holding$Total_holdings[1], "\n")
-c(as.numeric(total_holding$Total_holdings[1]),
-     -100 *(holdings_cash$Total_holdings[1] - holdings_cash$cash[1]) / holdings_cash$cash[1])
+  
+  # define trade date
+  crypto_trade_date <- crypto %>% 
+    group_by(coin) %>%  
+    arrange(date, coin) %>%
+    mutate(trade_date=Robustmin(date[volume>volume_threshold])) # add trade_date
+  
+  # get trade price at trade date (close of the day). Check that a date exist and that the price is not 0
+  crypto_trade_price <- crypto_trade_date %>%
+    mutate(trade_price=ifelse(length(close[date==trade_date])==1,ifelse(close[date==trade_date]!=0,close[date==trade_date],Inf),Inf))
+  
+  # calculate coin holding on any given date
+  crypto_coin_holding <- crypto_trade_price %>%
+    filter(!(symbol %in% symbols_to_exclude)) %>%    # add filter: symbol in arguments
+    mutate(holding= ifelse(date>=trade_date, close / trade_price, 0)) # holding should be 0 before trade happens
+  
+  # holdings per coin and total with cash
+  holdings_cash <- crypto_coin_holding %>%
+    group_by(date) %>%
+    mutate(cash=-sum(trade_price!=Inf & date >= trade_date)) %>%
+    mutate(Total_holdings=sum(holding)+cash) %>%
+    mutate(holding_coin_perc=holding/(Total_holdings-cash)*100) %>%  # % of coin assets only (excluding cash)
+    arrange(desc(date))
+  
+  # return total holding value (last date)
+  # a <- holdings_cash[holdings_cash$date==as.Date("2017-09-28"),c("Total_holdings")] # core R
+  total_holding <- holdings_cash %>%  distinct(date,Total_holdings)
+  
+  #cat("Total holdings: \n", total_holding$Total_holdings[1], "\n")
+  c(as.numeric(total_holding$Total_holdings[1]),
+    -100 *(holdings_cash$Total_holdings[1] - holdings_cash$cash[1]) / holdings_cash$cash[1])
 }
 
 Holdings_from_volume(crypto, 100000, "")
@@ -476,58 +494,28 @@ Holdings_from_volume(crypto, 100000, list("BTC", "ETH"))
 ```
 
 Finally I plotted the value of the final portfolio as a function of the volume threshold at which I would buy each coin.
-The gains get exponentially higher as the threshold diminishes. 
-Same conclusion here: we would need to check with exchange data if these coins were available at such small volumes. At the very least we can conclude that this trading strategy would only be available to small players.
+The gains get exponentially higher as the threshold diminishes. Meaning that if I buy each coin "right away" -say when the daily volume is only above $1000- then some of the coins will experience a meteoric rise and the portfolio will grow more during the holding period.
+Same conclusion here: we would need to check with exchange data if these coins were truly available at such small volumes. At the very least we can conclude that this trading strategy would only be available to small players.
 
 ```{r VolumeGraph, include=T, cache=T}
 # Total holdings obtained as a function of volume treshold
 n <- 0:9
 vol_vec <- c(1000*((3)^n))
-# vol_vec
-hold_vec <- sapply(vol_vec, function(x) {Holdings_from_volume(crypto, x)})
-# hold_vec
+hold_vec <- sapply(vol_vec, function(x) {Holdings_from_volume(crypto, x)}) # calculate final holdings
 
 df <- data.frame(vol_vec,hold_vec[1,1:length(vol_vec)],hold_vec[2,1:length(vol_vec)])
 ggplot(df, aes(vol_vec)) + 
   geom_line(aes(y=hold_vec[2,1:length(vol_vec)]), colour="black") + 
   ggtitle("Portfolio Return Relative to Minimum Buy Volume") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
   ylab("Total Return (%)") + 
-  xlab("Buy volume threshold")
+  xlab("Buy Volume Threshold")
 ```
-
-
-
-
-```{r Holdings graph}
-# Commenting - Market Cap graph above is enough
-
-#holdings_cash$id <- 1:nrow(holdings_cash) # create index so key is unique for tooltip - doesn't work
-
-# do not use scientific notation
-#options("scipen" = 10)
-
-# Graph - holdings per coin
-# holdings_cash %>%
-#   group_by(coin) %>% 
-#   filter(max(holding_coin_perc)>5) %>%# only coins that at some point where >5% of the total holdings
-#   ggvis(x = ~date, y = ~holding, fill = ~coin) %>%
-#   add_tooltip(symbol_tooltip, on = "hover") %>%
-#   layer_points(size := 10, 
-#                size.hover := 200,
-#                fillOpacity := 1, 
-#                fillOpacity.hover := 0.5) %>% 
-#   hide_legend('fill') 
-
-#  filter(date>min(holdings_cash$date) & date<max(holdings_cash$date))
-
-```
-
-
 
 ```{r self_contained = FALSE}
 # Time Series
 
-# filter last 12 months of data
+# filter to last 12 months of data
 coins_12m <- holdings_cash %>%
   filter(date > (as.Date("2017-09-28")-365)) %>%
   arrange(date)
@@ -578,7 +566,7 @@ legend("topleft", c("Bitcoin", "Ether"), lty = 1:2, cex = 0.5)
 ```
 
 ```{r}
-# boxplot BTC ~ ETH (back to vectors ? better function to use ?)
+# boxplot BTC ~ ETH 
 eth_decile <- cut(as.vector(btc_eth_returns[,2]), 10)
 boxplot(as.vector(btc_eth_returns[,1]) ~ eth_decile,  # need to convert back to vectors
         main = "% return BTC ~ ETH")
@@ -589,7 +577,8 @@ boxplot(as.vector(btc_eth_returns[,1]) ~ eth_decile,  # need to convert back to 
 
 ### Additional studies
 
-In response to comments from the author of the data file, I created 2 more graphs. The first one looked into the alleged strong regturns of Bitcoin at the beginning of the month. This is not supported by the data which shows no relationship.
+In response to comments from the author of the data file, I created 2 more graphs. The first one looked into the alleged strong returns of Bitcoin in the first days of the month. This is not supported by the data which shows no relationship.
+Note that I focused on the last 12 months for this analysis as there was limited activity in the previous 4 years.
 
 ```{r Return_MDay, include=T}
 # Returns ~ day of the month
@@ -607,7 +596,8 @@ btc_returns_vec <- c(0, btc_returns_vec) # add 0 because first return can't be c
 
 # boxplot better
 boxplot(btc_returns_vec ~ as.matrix(coins_12m[coins_12m$symbol=="BTC (Bitcoin)", "mday"]), 
-     xlab = "Day (1-365)", 
+     xlab = "Day of the month", 
+     ylab = "Daily return",
      main = "Distribution of BTC returns according day of the month")
 # Conclusion: no strong correlation (idea that returns are higher early in the month not backed by the data)
 
@@ -640,7 +630,7 @@ maxDrawdown(btc_eth_returns)
 ```
 
 ```{r}
-# Build Index
+# Build Market Cap Weighted Index
 
 # all with numeric vectors
 btc_returns <- apply(coins_12m[coins_12m$symbol=="BTC (Bitcoin)",c("close")], 2, function (x) { diff(x)/x[-length(x)] }) 
@@ -678,8 +668,9 @@ mcap_no_btc_index <- coins_12m[coins_12m$symbol=="BTC (Bitcoin)", c("date", "clo
 mcap_no_btc_index$close <- 0
 colnames(mcap_no_btc_index)[2] <- "weighted_return"
 
-# let's go with the ugly double loop # TO DO: vectorisation. Need regular Time Series (all dates filled)
-# works but slow
+# let's go with the ugly double loop (works but slow)
+# TO DO: vectorisation. Need regular Time Series (all dates filled)
+
 # for (date_var in days) {
 #   accu_wr <- 0 # weighted return
 #   accu_w <- 0 # sum of weights
@@ -713,13 +704,16 @@ ggAcf(TS_list$`BTC (Bitcoin)`[,2], lag.max = 30, type = "correlation")
 
 ```{r Correlation_index_BTC}
 ggCcf(as.vector(mcap_no_btc_index$weighted_return), btc_returns)
+# Conclusion: correction between Bitcoin and rest of the index is clearly visible (no lag)
 ```
 
 The second shows the returns of a coins index (with 'traditional' market cap weights) in relation to Bitcoin returns. Supposedly Bitcoin price surges were causing alternative coin holders to sell their holdings in exchange for Bitcoin. We see that in fact all crypto currencies seem to move in tandem.
 ```{r boxplot_index_BTC, include=T}
 btc_decile <- cut(TS_list$`BTC (Bitcoin)`$close, 20)
 boxplot(as.vector(mcap_no_btc_index$weighted_return) ~ btc_decile,  # need to convert back to vectors
-        main = "% return index ~ BTC")
+        main = "% Return Weighted Index ~ Bitcoin",
+        xlab = "Bitcoin Daily Return Range", 
+        ylab = "Weighted Index Daily Return")
 # axis(side = 1, at=c(1,5, 10, 15, 20), labels=c("-18.8%", "-10.2%", "0%", "11.1%", "21.8%"))
 ```
 
