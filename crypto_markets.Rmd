@@ -120,32 +120,6 @@ small_mc_perc <- round(100*dim(crypto[crypto$date=="2017-09-28" & crypto$market<
 small_mc_perc
 ```
 
-### Market Capitalisation Distribution
-
-Looking at the distribution of coin market caps, we observe a large skew towards smaller valuations. 
-In fact `r null_mc` (`r null_mc_perc`%) of coins have no market capitalisation as of September 28th, 2017 (the market cap reported by the website is $0). 
-`r small_mc` (`r small_mc_perc`%) have a market cap below $1 million.
-```{r MarketCap_Hist, include=T, cache=T}
-# "Present" Market Cap histogram (latest day)
-crypto[crypto$date=="2017-09-28",] %>% 
-  ggplot(aes(x = market)) + 
-  geom_histogram(binwidth = 1e6) + coord_cartesian(xlim = c(0, 1e8)) +
-  ggtitle("Distribution of coin market caps") + 
-  theme(plot.title = element_text(hjust = 0.5)) +
-  scale_x_continuous(name ="Coin market capitalization", breaks = c(1e6,2.5e7,1e8, 1e9), labels = scales::comma) +
-  scale_y_continuous(name ="Number of coins")
-
-# breaks = c(1e6,2.5e7,1e8, 1e9), limits=c("1,000,000","25,000,000","100,000,000", "1,000,000,000"))
-
-# Taking log and removing coins without 0 market cap
-# For now commenting log price distribution as unable to explain clearly
-
-# crypto[crypto$date=="2017-09-28" & crypto$market != 0,] %>% 
-#   ggplot(aes(x = log(market+1))) + 
-#   geom_histogram(binwidth = 0.1) #+ coord_cartesian(xlim = c(55, 70))
-
-```
-
 ### Coins creation
 The following graph shows the constant rise of reported coins. We observe some volatility in the number of new coins in last few months. One factor was China's decision to ban initial coin offerings (ICOs) on September, 4th.
 Today the pace of new ICOs globally is still strong.
@@ -170,6 +144,7 @@ crypto_active %>%
   ggtitle("Coin initiations (coinmarketcap.com)") +
   theme(plot.title = element_text(hjust = 0.5)) +
   scale_x_discrete(name ="Month", breaks = c("201304","201404","201504", "201604", "201704"), labels = c("Apr 2013","Apr 2014","Apr 2015", "Apr 2016", "Apr 2017")) +
+  guides(colour=guide_legend(title="Legend")) +
   # theme(axis.text.x = element_text(angle = 60, hjust = 1)) + # angled text no longer needed
   scale_y_continuous(name ="Number of coins", breaks=seq(0, 1200, by = 200))
 
@@ -214,6 +189,34 @@ crypto %>%
   filter(coin=="Bottlecaps")
 ```
 
+### Market Capitalisation Distribution
+
+Looking at the distribution of coin market caps, we observe a large skew towards smaller valuations. 
+In fact `r null_mc` (`r null_mc_perc`%) of coins have no market capitalisation as of September 28th, 2017 (the market cap reported by the website is $0). 
+`r small_mc` (`r small_mc_perc`%) have a market cap below $1 million.
+```{r MarketCap_Hist, include=T, cache=T}
+# "Present" Market Cap histogram (latest day)
+crypto[crypto$date=="2017-09-28",] %>% 
+  ggplot(aes(x = market)) + 
+  geom_histogram(binwidth = 1e6) + coord_cartesian(xlim = c(0, 1e8)) +
+  ggtitle("Distribution of coin market caps") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_x_continuous(name ="Coin market capitalization", breaks = c(1e6,2.5e7,1e8, 1e9), labels = scales::comma) +
+  scale_y_continuous(name ="Number of coins")
+
+# breaks = c(1e6,2.5e7,1e8, 1e9), limits=c("1,000,000","25,000,000","100,000,000", "1,000,000,000"))
+
+# Taking log and removing coins without 0 market cap
+# For now commenting log price distribution as unable to explain clearly
+
+# crypto[crypto$date=="2017-09-28" & crypto$market != 0,] %>% 
+#   ggplot(aes(x = log(market+1))) + 
+#   geom_histogram(binwidth = 0.1) #+ coord_cartesian(xlim = c(55, 70))
+
+```
+
+
+
 ```{r holdings_cash, cache=T}
 # Defining df holdings_cash (used in later analysis)
 
@@ -249,9 +252,10 @@ holdings_cash <- crypto_coin_holding %>%
 ### Coins Market Cap graph
 
 This graph shows the evolution of each coin total market cap over time. 
-```{r MarketCapGraph, include=T, fig.width=12, fig.height=8, cache=F}
+```{r MarketCapGraph, include=T, fig.width=9, fig.height=6}
 # Graph - market cap evolution
 options("scipen" = 10)
+
 symbol_tooltip <- function(x) {
   if (is.null(x)) return(NULL)
   
@@ -301,7 +305,8 @@ df %>%
   layer_lines(strokeWidth := 1) %>%
   layer_points(size = 1, fill = ~symbol, opacity := 0) %>%
   add_tooltip(symbol_tooltip, on = "hover") %>%
-  hide_legend('fill') %>%
+  # ggvis::add_legend("Coins") %>%
+  # hide_legend('fill') %>%
   hide_legend('stroke')
 
 
